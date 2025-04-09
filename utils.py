@@ -64,11 +64,19 @@ class Config:
             if section in self._config:
                 self._config[section].update(values)
 
-    def get(self, section: str, key: str) -> Any:
-        """設定値の取得"""
+    def get(self, section: str, key: str, default: Any = None) -> Any:
+        """
+        設定値の取得
+        Args:
+            section: セクション名
+            key: キー名
+            default: デフォルト値（設定が見つからない場合に返す値）
+        """
         try:
             return self._config[section][key]
         except KeyError:
+            if default is not None:
+                return default
             raise ConfigError(f"設定が見つかりません: {section}.{key}")
 
     def save(self, config_path: str):
