@@ -221,4 +221,215 @@ MIT License
 
 A program that saves video before and after triggers, similar to a car's drive recorder.
 
-[英語版は日本語版と同じ構成で続きます...]
+## Features
+- Automatic video saving before and after triggers
+- Multi-trigger support (Keyboard, HTTP, WebSocket, GPIO)
+- Customizable settings
+- Real-time preview
+- Platform independent (except for some features)
+
+## Requirements
+- Python 3.7 or higher
+- OpenCV 4.5.0 or higher
+- Dependencies (see requirements.txt)
+- Webcam or video capture device
+
+## Installation
+
+1. Clone the repository
+```bash
+git clone https://github.com/Mioooon/PyDriveRecorder.git
+cd PyDriveRecorder
+```
+
+2. Create virtual environment (recommended)
+```bash
+python -m venv .venv
+source .venv/bin/activate  # Linux/macOS
+# or
+.venv\Scripts\activate     # Windows
+```
+
+3. Install dependencies
+```bash
+pip install -r requirements.txt
+```
+
+## Basic Usage
+
+1. Launch the program
+```bash
+python main.py
+
+# Launch with custom config file
+RECORDER_CONFIG=/path/to/config.yaml python main.py
+```
+
+2. GUI Operation
+   - Select trigger method
+   - Set recording time before/after trigger
+   - Specify save directory
+   - Check camera preview
+
+## Function Reference
+
+### Trigger Features
+
+1. Keyboard Trigger
+   - Method: keyboard
+   - Input: Space key
+   - Usage: Manual trigger input
+
+2. HTTP Trigger
+   ```bash
+   # Check status
+   GET http://localhost:8080/status
+   Response: {
+       "status": "running",
+       "trigger_type": "http",
+       "uptime": 3600.5
+   }
+
+   # Execute trigger (GET)
+   GET http://localhost:8080/trigger
+
+   # Execute trigger (POST)
+   POST http://localhost:8080/trigger
+   Content-Type: application/json
+   {
+       "source": "external_device"
+   }
+
+   # Update settings
+   POST http://localhost:8080/config
+   Content-Type: application/json
+   {
+       "trigger_type": "keyboard"
+   }
+   ```
+
+3. WebSocket Trigger
+   ```python
+   import socket
+
+   def send_trigger():
+       client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+       try:
+           client.connect(('localhost', 8081))
+           client.send('trigger'.encode('utf-8'))
+       finally:
+           client.close()
+   ```
+
+4. GPIO Trigger (Raspberry Pi only)
+   - Operating in BCM mode
+   - Default: GPIO 17
+   - Uses pull-up resistor
+   - Triggers on falling edge
+
+### Configuration File (config.yaml)
+
+```yaml
+camera:
+  default_device: 0        # Camera device number
+  frame_width: 640        # Frame width
+  frame_height: 480       # Frame height
+  fps: 30                 # Frame rate
+
+recording:
+  default_before_time: 5  # Seconds before trigger
+  default_after_time: 5   # Seconds after trigger
+  max_time: 30           # Maximum recording time
+  min_time: 1            # Minimum recording time
+
+trigger:
+  default_type: keyboard  # Default trigger type
+  http_port: 8080        # HTTP server port
+  websocket_port: 8081   # WebSocket server port
+  gpio_pin: 17           # GPIO pin number
+
+buffer:
+  max_size_mb: 1024      # Maximum buffer size (MB)
+  compression_quality: 90 # JPEG compression quality (1-100)
+```
+
+### GUI Features
+
+1. Camera Settings
+   - Camera number selection (0-3)
+   - Preview display
+   - Auto-reconnection feature
+
+2. Trigger Settings
+   - Trigger method selection
+   - Manual trigger button
+   - Trigger status display
+
+3. Recording Settings
+   - Pre-trigger time (1-30 seconds)
+   - Post-trigger time (1-30 seconds)
+   - Real-time second display
+
+4. Save Settings
+   - Save directory specification
+   - Automatic directory creation
+   - Filename: record_YYYYMMDD_HHMMSS.mp4
+
+## Program Structure
+
+### Module Description
+```
+PyDriveRecorder/
+├── main.py           # Main program
+├── gui_manager.py    # GUI management
+├── video_manager.py  # Video processing
+├── trigger_manager.py # Trigger management
+├── utils.py         # Utilities
+├── exceptions.py    # Exception definitions
+├── config.yaml      # Configuration file
+└── requirements.txt # Dependencies
+```
+
+### Error Handling
+Various exception classes for error management:
+- `VideoError`: Video-related errors
+- `CameraError`: Camera-related errors
+- `TriggerError`: Trigger-related errors
+- `ConfigError`: Configuration-related errors
+- `ResourceError`: Resource-related errors
+
+## Notes
+
+1. Performance Considerations
+   - Memory usage controlled by buffer size
+   - CPU usage optimized by frame rate
+   - No automatic disk space management
+
+2. Security
+   - No authentication for HTTP/WebSocket
+   - Localhost connections recommended
+   - File path validation included
+
+3. Limitations
+   - GPIO only supported on Raspberry Pi
+   - No audio recording
+   - Some USB cameras may have switching delays
+   - Long continuous recording not recommended
+
+## License
+MIT License
+
+## Development & Contribution
+
+1. Bug Reports
+   - Submit via GitHub Issues
+   - Please include reproduction steps
+
+2. Feature Requests
+   - Submit via GitHub Issues
+   - Please include specific use cases
+
+3. Pull Requests
+   - Fork and make changes
+   - Add tests
+   - Submit pull request
