@@ -1,0 +1,31 @@
+camera:
+  default_device: 0
+  frame_width: 1920
+  frame_height: 1080
+  fps: 30
+
+recording:
+  default_before_time: 20
+  default_after_time: 20
+  max_time: 30
+  min_time: 1
+
+trigger:
+  default_type: keyboard
+  available_types:
+    - keyboard
+    - gpio
+    - http
+    - websocket
+  gpio_pin: 17  # Raspberry Pi GPIO pin number
+  http_port: 8080
+  websocket_port: 8081
+
+buffer:
+  max_size_mb: 4096  # 4GB
+  compression_quality: 90  # JPEG compression quality (1-100)
+
+logging:
+  level: INFO
+  format: '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+  file: logs/recorder.log
