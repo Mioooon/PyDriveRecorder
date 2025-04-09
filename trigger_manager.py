@@ -8,7 +8,16 @@ import json
 
 from pynput import keyboard
 try:
-    import RPi.GPIO as GPIO
+    from gpiozero import Button, Device
+    from gpiozero.pins.mock import MockFactory # For testing on non-Pi systems if needed
+    # Attempt to set the default pin factory. This will fail if not on a Pi or if gpiozero isn't properly configured.
+    try:
+        Device.pin_factory
+    except Exception:
+        # Fallback or specific handling if needed, e.g., MockFactory for testing
+        # Device.pin_factory = MockFactory()
+        # For production, we assume if this fails, GPIO is not truly available
+        raise ImportError("gpiozero pin factory setup failed. Not on RPi or library issue?")
     GPIO_AVAILABLE = True
 except ImportError:
     GPIO_AVAILABLE = False
@@ -147,7 +156,7 @@ class TriggerManager:
         
         # 各トリガーのハンドラ
         self.keyboard_listener = None
-        self.gpio_pin = None
+        self.gpio_button = None # Changed from gpio_pin
         self.http_server = None
         self.websocket_server = None
         
@@ -192,9 +201,9 @@ class TriggerManager:
             self.keyboard_listener.stop()
             self.keyboard_listener = None
 
-        if self.gpio_pin is not None and GPIO_AVAILABLE:
-            GPIO.cleanup(self.gpio_pin)
-            self.gpio_pin = None
+        if self.gpio_button is not None and GPIO_AVAILABLE:
+            self.gpio_button.close() # Close the gpiozero device
+            self.gpio_button = None
 
         if self.http_server:
             self.http_server.shutdown()
@@ -248,27 +257,30 @@ class TriggerManager:
         self.keyboard_listener.start()
 
     def _start_gpio_listener(self):
-        """GPIOリスナーの開始"""
+        """GPIOリスナーの開始 (gpiozero版)"""
         if not GPIO_AVAILABLE:
-            raise TriggerError("GPIO機能は利用できません")
+            raise TriggerError("GPIO機能は利用できません (gpiozeroが見つからないか、RPi以外で実行されています)")
 
-        self.gpio_pin = self.config.get('trigger', 'gpio_pin')
-        GPIO.setmode(GPIO.BCM)
-        GPIO.setup(self.gpio_pin, GPIO.IN, pull_up_down=GPIO.PUD_UP)
+        gpio_pin_number = self.config.get('trigger', 'gpio_pin')
         
-        def gpio_callback(channel):
-            if self.running:
-                self.trigger_queue.put(
-                    TriggerEvent('gpio', f'pin{channel}', time.time())
-                )
-                logger.debug(f"GPIOトリガーを検知: pin{channel}")
+        try:
+            # pull_up=True is the default for Button, equivalent to PUD_UP
+            # bounce_time is in seconds for gpiozero
+            self.gpio_button = Button(gpio_pin_number, pull_up=True, bounce_time=0.2)
 
-        GPIO.add_event_detect(
-            self.gpio_pin,
-            GPIO.FALLING,
-            callback=gpio_callback,
-            bouncetime=200
-        )
+            def gpio_pressed():
+                if self.running:
+                    self.trigger_queue.put(
+                        TriggerEvent('gpio', f'pin{gpio_pin_number}', time.time())
+                    )
+                    logger.debug(f"GPIOトリガーを検知 (gpiozero): pin{gpio_pin_number}")
+
+            # Trigger when the button is pressed (falling edge due to pull-up)
+            self.gpio_button.when_pressed = gpio_pressed
+            logger.info(f"GPIOリスナーを開始 (gpiozero): pin={gpio_pin_number}")
+
+        except Exception as e:
+            raise TriggerError(f"GPIOピン {gpio_pin_number} の初期化に失敗: {e}")
 
     def _start_http_listener(self):
         """HTTPリスナーの開始"""

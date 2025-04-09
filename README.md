@@ -13,6 +13,7 @@
 - Python 3.7以上
 - OpenCV 4.5.0以上
 - 依存パッケージ（requirements.txtを参照）
+  - Raspberry PiでGPIOトリガーを使用する場合、`gpiozero`が必要です。
 - Webカメラまたはビデオキャプチャデバイス
 
 ## インストール方法
@@ -103,10 +104,10 @@ RECORDER_CONFIG=/path/to/config.yaml python main.py
    ```
 
 4. GPIO トリガー（Raspberry Piのみ）
-   - BCMモードで動作
-   - デフォルト: GPIO 17
-   - プルアップ抵抗使用
-   - 立ち下がりエッジでトリガー
+   - `gpiozero`ライブラリを使用
+   - デフォルト: GPIO 17 (BCMピン番号)
+   - 内部プルアップ抵抗を使用
+   - ボタンが押されたとき（ピンがLOWになったとき）にトリガー
 
 ### 設定ファイル（config.yaml）
 
@@ -192,7 +193,7 @@ PyDriveRecorder/
    - ファイルパスの検証あり
 
 3. 制限事項
-   - GPIOはRaspberry Piのみ対応
+   - GPIOトリガーは`gpiozero`がインストールされたRaspberry Piのみ対応
    - 音声録音未対応
    - 一部のUSBカメラで切り替え遅延あり
    - 長時間の連続録画は非推奨
@@ -232,6 +233,7 @@ A program that saves video before and after triggers, similar to a car's drive r
 - Python 3.7 or higher
 - OpenCV 4.5.0 or higher
 - Dependencies (see requirements.txt)
+  - Requires `gpiozero` for GPIO trigger on Raspberry Pi.
 - Webcam or video capture device
 
 ## Installation
@@ -322,10 +324,10 @@ RECORDER_CONFIG=/path/to/config.yaml python main.py
    ```
 
 4. GPIO Trigger (Raspberry Pi only)
-   - Operating in BCM mode
-   - Default: GPIO 17
-   - Uses pull-up resistor
-   - Triggers on falling edge
+   - Uses the `gpiozero` library
+   - Default: GPIO 17 (BCM pin number)
+   - Uses internal pull-up resistor
+   - Triggers when the button is pressed (pin goes LOW)
 
 ### Configuration File (config.yaml)
 
@@ -411,7 +413,7 @@ Various exception classes for error management:
    - File path validation included
 
 3. Limitations
-   - GPIO only supported on Raspberry Pi
+   - GPIO trigger only supported on Raspberry Pi with `gpiozero` installed.
    - No audio recording
    - Some USB cameras may have switching delays
    - Long continuous recording not recommended
