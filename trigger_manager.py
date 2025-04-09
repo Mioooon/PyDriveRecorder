@@ -7,20 +7,30 @@ from typing import Optional, Callable
 import json
 
 from pynput import keyboard
+
+# Try importing GPIO libraries
 try:
     from gpiozero import Button, Device
-    from gpiozero.pins.mock import MockFactory # For testing on non-Pi systems if needed
-    # Attempt to set the default pin factory. This will fail if not on a Pi or if gpiozero isn't properly configured.
+    # Attempt to set the default pin factory. This might fail if not on a Pi.
     try:
-        Device.pin_factory
-    except Exception:
-        # Fallback or specific handling if needed, e.g., MockFactory for testing
-        # Device.pin_factory = MockFactory()
-        # For production, we assume if this fails, GPIO is not truly available
-        raise ImportError("gpiozero pin factory setup failed. Not on RPi or library issue?")
-    GPIO_AVAILABLE = True
+        Device.pin_factory # Accessing this property initializes the default factory
+        GPIOZERO_AVAILABLE = True
+        logger.debug("gpiozero library is available.")
+    except Exception as e:
+        logger.debug(f"gpiozero pin factory setup failed, likely not on RPi or config issue: {e}")
+        GPIOZERO_AVAILABLE = False
 except ImportError:
-    GPIO_AVAILABLE = False
+    GPIOZERO_AVAILABLE = False
+
+try:
+    import RPi.GPIO as GPIO
+    RPIGPIO_AVAILABLE = True
+    logger.debug("RPi.GPIO library is available.")
+except ImportError:
+    RPIGPIO_AVAILABLE = False
+
+# Overall GPIO availability check
+GPIO_AVAILABLE = GPIOZERO_AVAILABLE or RPIGPIO_AVAILABLE
 
 from exceptions import TriggerError
 from utils import logger, Config
@@ -153,10 +163,12 @@ class TriggerManager:
         self.trigger_queue = queue.Queue()
         self._running = False
         self.trigger_type = config.get('trigger', 'default_type')
+        self.gpio_library_preference = config.get('trigger', 'gpio_library', 'auto').lower() # Read library preference
         
         # 各トリガーのハンドラ
         self.keyboard_listener = None
-        self.gpio_button = None # Changed from gpio_pin
+        self.active_gpio_handler = None # Holds the active GPIO object (Button or pin number)
+        self.active_gpio_library = None # Stores 'gpiozero' or 'rpigpio'
         self.http_server = None
         self.websocket_server = None
         
@@ -176,7 +188,8 @@ class TriggerManager:
 
             if self.trigger_type == 'keyboard':
                 self._start_keyboard_listener()
-            elif self.trigger_type == 'gpio' and GPIO_AVAILABLE:
+            elif self.trigger_type == 'gpio':
+                # GPIO listener start now depends on library availability and preference
                 self._start_gpio_listener()
             elif self.trigger_type == 'http':
                 self._start_http_listener()
@@ -201,9 +214,23 @@ class TriggerManager:
             self.keyboard_listener.stop()
             self.keyboard_listener = None
 
-        if self.gpio_button is not None and GPIO_AVAILABLE:
-            self.gpio_button.close() # Close the gpiozero device
-            self.gpio_button = None
+        # Cleanup based on the active GPIO library
+        if self.active_gpio_handler is not None:
+            if self.active_gpio_library == 'gpiozero' and GPIOZERO_AVAILABLE:
+                try:
+                    self.active_gpio_handler.close()
+                    logger.debug("Closed gpiozero handler.")
+                except Exception as e:
+                    logger.error(f"Error closing gpiozero handler: {e}")
+            elif self.active_gpio_library == 'rpigpio' and RPIGPIO_AVAILABLE:
+                try:
+                    # RPi.GPIO cleans up all channels used by the script unless specific channels are passed
+                    GPIO.cleanup()
+                    logger.debug("Cleaned up RPi.GPIO.")
+                except Exception as e:
+                    logger.error(f"Error cleaning up RPi.GPIO: {e}")
+            self.active_gpio_handler = None
+            self.active_gpio_library = None
 
         if self.http_server:
             self.http_server.shutdown()
@@ -257,30 +284,81 @@ class TriggerManager:
         self.keyboard_listener.start()
 
     def _start_gpio_listener(self):
-        """GPIOリスナーの開始 (gpiozero版)"""
+        """GPIOリスナーの開始 (ライブラリ自動選択対応)"""
         if not GPIO_AVAILABLE:
-            raise TriggerError("GPIO機能は利用できません (gpiozeroが見つからないか、RPi以外で実行されています)")
+            raise TriggerError("利用可能なGPIOライブラリが見つかりません。")
 
         gpio_pin_number = self.config.get('trigger', 'gpio_pin')
-        
+        library_to_use = None
+
+        # Determine which library to use based on preference and availability
+        if self.gpio_library_preference == 'gpiozero' and GPIOZERO_AVAILABLE:
+            library_to_use = 'gpiozero'
+        elif self.gpio_library_preference == 'rpigpio' and RPIGPIO_AVAILABLE:
+            library_to_use = 'rpigpio'
+        elif self.gpio_library_preference == 'auto':
+            if GPIOZERO_AVAILABLE:
+                library_to_use = 'gpiozero'
+            elif RPIGPIO_AVAILABLE:
+                library_to_use = 'rpigpio'
+
+        if not library_to_use:
+            raise TriggerError(f"要求されたGPIOライブラリ '{self.gpio_library_preference}' が利用できないか、'auto' で利用可能なライブラリがありません。")
+
+        # Initialize the chosen library
         try:
-            # pull_up=True is the default for Button, equivalent to PUD_UP
-            # bounce_time is in seconds for gpiozero
-            self.gpio_button = Button(gpio_pin_number, pull_up=True, bounce_time=0.2)
-
-            def gpio_pressed():
-                if self.running:
-                    self.trigger_queue.put(
-                        TriggerEvent('gpio', f'pin{gpio_pin_number}', time.time())
-                    )
-                    logger.debug(f"GPIOトリガーを検知 (gpiozero): pin{gpio_pin_number}")
-
-            # Trigger when the button is pressed (falling edge due to pull-up)
-            self.gpio_button.when_pressed = gpio_pressed
-            logger.info(f"GPIOリスナーを開始 (gpiozero): pin={gpio_pin_number}")
-
+            if library_to_use == 'gpiozero':
+                self._initialize_gpiozero(gpio_pin_number)
+            elif library_to_use == 'rpigpio':
+                self._initialize_rpigpio(gpio_pin_number)
+            self.active_gpio_library = library_to_use
+            logger.info(f"GPIOリスナーを開始 ({library_to_use}): pin={gpio_pin_number}")
         except Exception as e:
-            raise TriggerError(f"GPIOピン {gpio_pin_number} の初期化に失敗: {e}")
+            self.active_gpio_library = None # Ensure state is clean on failure
+            raise TriggerError(f"GPIOピン {gpio_pin_number} の初期化に失敗 ({library_to_use}): {e}")
+
+    def _initialize_gpiozero(self, pin_number):
+        """gpiozeroライブラリを使用してGPIOを初期化"""
+        # pull_up=True is the default for Button, equivalent to PUD_UP
+        # bounce_time is in seconds for gpiozero
+        button = Button(pin_number, pull_up=True, bounce_time=0.2)
+
+        def gpio_pressed():
+            if self.running:
+                self.trigger_queue.put(
+                    TriggerEvent('gpio', f'pin{pin_number}', time.time())
+                )
+                logger.debug(f"GPIOトリガーを検知 (gpiozero): pin{pin_number}")
+
+        button.when_pressed = gpio_pressed
+        self.active_gpio_handler = button # Store the Button object
+
+    def _initialize_rpigpio(self, pin_number):
+        """RPi.GPIOライブラリを使用してGPIOを初期化"""
+        GPIO.setmode(GPIO.BCM)
+        # Setup with pull-up resistor
+        GPIO.setup(pin_number, GPIO.IN, pull_up_down=GPIO.PUD_UP)
+
+        def gpio_callback(channel):
+            # Check if still running and if the event is for the correct pin
+            if self.running and channel == pin_number:
+                 # Add a small delay to debounce manually if needed, though bouncetime helps
+                time.sleep(0.05)
+                # Re-check the pin state to confirm it's low (pressed)
+                if GPIO.input(channel) == GPIO.LOW:
+                    self.trigger_queue.put(
+                        TriggerEvent('gpio', f'pin{channel}', time.time())
+                    )
+                    logger.debug(f"GPIOトリガーを検知 (RPi.GPIO): pin{channel}")
+
+        # Detect falling edge (high to low transition due to pull-up)
+        GPIO.add_event_detect(
+            pin_number,
+            GPIO.FALLING,
+            callback=gpio_callback,
+            bouncetime=200 # milliseconds
+        )
+        self.active_gpio_handler = pin_number # Store the pin number for cleanup reference
 
     def _start_http_listener(self):
         """HTTPリスナーの開始"""

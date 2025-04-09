@@ -13,7 +13,7 @@
 - Python 3.7以上
 - OpenCV 4.5.0以上
 - 依存パッケージ（requirements.txtを参照）
-  - Raspberry PiでGPIOトリガーを使用する場合、`gpiozero`が必要です。
+  - Raspberry PiでGPIOトリガーを使用する場合、`gpiozero` または `RPi.GPIO` のいずれか（または両方）が必要です。`gpiozero` を推奨します（特にRaspberry Pi 5以降）。
 - Webカメラまたはビデオキャプチャデバイス
 
 ## インストール方法
@@ -104,7 +104,8 @@ RECORDER_CONFIG=/path/to/config.yaml python main.py
    ```
 
 4. GPIO トリガー（Raspberry Piのみ）
-   - `gpiozero`ライブラリを使用
+   - `gpiozero` または `RPi.GPIO` ライブラリを使用（設定可能）
+   - `config.yaml` の `trigger.gpio_library` で使用するライブラリを選択 (`auto`, `gpiozero`, `rpigpio`)。`auto` は `gpiozero` を優先します。
    - デフォルト: GPIO 17 (BCMピン番号)
    - 内部プルアップ抵抗を使用
    - ボタンが押されたとき（ピンがLOWになったとき）にトリガー
@@ -128,7 +129,10 @@ trigger:
   default_type: keyboard  # デフォルトのトリガー
   http_port: 8080        # HTTPサーバーポート
   websocket_port: 8081   # WebSocketサーバーポート
-  gpio_pin: 17           # GPIOピン番号
+  gpio_pin: 17           # GPIOピン番号 (BCM)
+  # 使用するGPIOライブラリ: 'auto', 'gpiozero', 'rpigpio'
+  # 'auto' は gpiozero -> RPi.GPIO の順で試行
+  gpio_library: auto
 
 buffer:
   max_size_mb: 1024      # 最大バッファサイズ（MB）
@@ -193,7 +197,7 @@ PyDriveRecorder/
    - ファイルパスの検証あり
 
 3. 制限事項
-   - GPIOトリガーは`gpiozero`がインストールされたRaspberry Piのみ対応
+   - GPIOトリガーは `gpiozero` または `RPi.GPIO` がインストールされたRaspberry Piのみ対応
    - 音声録音未対応
    - 一部のUSBカメラで切り替え遅延あり
    - 長時間の連続録画は非推奨
@@ -233,7 +237,7 @@ A program that saves video before and after triggers, similar to a car's drive r
 - Python 3.7 or higher
 - OpenCV 4.5.0 or higher
 - Dependencies (see requirements.txt)
-  - Requires `gpiozero` for GPIO trigger on Raspberry Pi.
+  - Requires `gpiozero` or `RPi.GPIO` (or both) for GPIO trigger on Raspberry Pi. `gpiozero` is recommended (especially for Pi 5+).
 - Webcam or video capture device
 
 ## Installation
@@ -324,7 +328,8 @@ RECORDER_CONFIG=/path/to/config.yaml python main.py
    ```
 
 4. GPIO Trigger (Raspberry Pi only)
-   - Uses the `gpiozero` library
+   - Uses `gpiozero` or `RPi.GPIO` library (configurable)
+   - Select the library via `trigger.gpio_library` in `config.yaml` (`auto`, `gpiozero`, `rpigpio`). `auto` prefers `gpiozero`.
    - Default: GPIO 17 (BCM pin number)
    - Uses internal pull-up resistor
    - Triggers when the button is pressed (pin goes LOW)
@@ -348,7 +353,10 @@ trigger:
   default_type: keyboard  # Default trigger type
   http_port: 8080        # HTTP server port
   websocket_port: 8081   # WebSocket server port
-  gpio_pin: 17           # GPIO pin number
+  gpio_pin: 17           # GPIO pin number (BCM)
+  # Select GPIO library: 'auto', 'gpiozero', or 'RPi.GPIO'
+  # 'auto' will try gpiozero first, then RPi.GPIO.
+  gpio_library: auto
 
 buffer:
   max_size_mb: 1024      # Maximum buffer size (MB)
@@ -413,7 +421,7 @@ Various exception classes for error management:
    - File path validation included
 
 3. Limitations
-   - GPIO trigger only supported on Raspberry Pi with `gpiozero` installed.
+   - GPIO trigger only supported on Raspberry Pi with `gpiozero` or `RPi.GPIO` installed.
    - No audio recording
    - Some USB cameras may have switching delays
    - Long continuous recording not recommended

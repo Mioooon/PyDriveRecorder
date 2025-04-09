@@ -18,6 +18,9 @@ trigger:
     - http
     - websocket
   gpio_pin: 17  # Raspberry Pi GPIO pin number
+  # Select GPIO library: 'auto', 'gpiozero', or 'RPi.GPIO'
+  # 'auto' will try gpiozero first, then RPi.GPIO.
+  gpio_library: auto
   http_port: 8080
   websocket_port: 8081
 
